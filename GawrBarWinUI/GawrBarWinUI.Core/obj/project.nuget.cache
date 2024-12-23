@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "dgSpecHash": "DyIM/wORSaU=",
+  "success": true,
+  "projectFilePath": "C:\\Users\\TYLERKIONGTAILE\\OneDrive - NUS High School\\Documents\\GitHub\\GawrBar\\GawrBarWinUI\\GawrBarWinUI.Core\\GawrBarWinUI.Core.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\TYLERKIONGTAILE\\.nuget\\packages\\newtonsoft.json\\13.0.2\\newtonsoft.json.13.0.2.nupkg.sha512",
+    "C:\\Users\\TYLERKIONGTAILE\\.nuget\\packages\\microsoft.windowsdesktop.app.ref\\7.0.20\\microsoft.windowsdesktop.app.ref.7.0.20.nupkg.sha512",
+    "C:\\Users\\TYLERKIONGTAILE\\.nuget\\packages\\microsoft.netcore.app.ref\\7.0.20\\microsoft.netcore.app.ref.7.0.20.nupkg.sha512",
+    "C:\\Users\\TYLERKIONGTAILE\\.nuget\\packages\\microsoft.aspnetcore.app.ref\\7.0.20\\microsoft.aspnetcore.app.ref.7.0.20.nupkg.sha512"
+  ],
+  "logs": []
+}
