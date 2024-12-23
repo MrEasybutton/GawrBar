@@ -1,9 +1,9 @@
 #include "framework.h"
 #include "GawrBar.h"
-#include <dwmapi.h>
-#include <cmath>
-#include <windows.h>
-#include <shellapi.h>
+#include <dwmapi.h>                 // Window Framing API
+#include <cmath>                    // Math stuff 
+#include <windows.h>                
+#include <shellapi.h>               // System Tray Icons
 #pragma comment(lib, "dwmapi.lib")
 
 #define MAX_LOADSTRING 100
@@ -16,9 +16,8 @@ BOOL InitInstance(HINSTANCE, int);
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 INT_PTR CALLBACK About(HWND, UINT, WPARAM, LPARAM);
 
-int screenWidth;
+int screenWidth; // Screen Width (currently has issues so a fix is issued below)
 int screenHeight;
-int buffer;
 
 NOTIFYICONDATA nid;
 
@@ -56,18 +55,18 @@ ATOM MyRegisterClass(HINSTANCE hInstance)
 BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 {
     hInst = hInstance;
-    HWND hWnd = CreateWindowW(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, 100, CW_USEDEFAULT, 0, nullptr, nullptr, hInstance, nullptr);
+    HWND hWnd = CreateWindowExW(WS_EX_TOOLWINDOW, szWindowClass, szTitle, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, 100, CW_USEDEFAULT, 0, nullptr, nullptr, hInstance, nullptr);
 
     if (!hWnd)
         return FALSE;
 
-    int sysWidthRead = GetSystemMetrics(SM_CXSCREEN);
+    int sysWidthRead = GetSystemMetrics(SM_CXSCREEN); // This is inaccurate apparently
     screenWidth = round(sysWidthRead + round((sysWidthRead - 4) * 0.754));
     screenHeight = GetSystemMetrics(SM_CYSCREEN);
     int leftMargin = 4, rightMargin = 4, upperMargin = 4, lowerMargin = 4;
     int windowWidth = screenWidth - leftMargin - rightMargin, windowHeight = 200;
 
-    SetWindowPos(hWnd, HWND_TOP, 0, 100, sysWidthRead, 600, SWP_NOZORDER);
+    SetWindowPos(hWnd, HWND_TOP, 0, 20, 500, 560, SWP_NOZORDER);
 
     HWND hTaskbar = FindWindow(L"Shell_TrayWnd", NULL);
     if (hTaskbar) {
@@ -81,6 +80,9 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
         return FALSE;
     }
 
+    ShowWindow(hWnd, SW_HIDE);
+    UpdateWindow(hWnd);
+
     memset(&nid, 0, sizeof(NOTIFYICONDATA));
     nid.cbSize = sizeof(NOTIFYICONDATA);
     nid.hWnd = hWnd;
@@ -88,12 +90,10 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
     nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
     nid.uCallbackMessage = WM_USER + 1;
     nid.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_GAWRBAR));
-    wcscpy_s(nid.szTip, L"GawrBar Icon");
+    wcscpy_s(nid.szTip, L"GawrBar"); // System Tray Icon
 
     Shell_NotifyIcon(NIM_ADD, &nid);
 
-    ShowWindow(hWnd, nCmdShow);
-    UpdateWindow(hWnd);
 
     return TRUE;
 }
@@ -107,6 +107,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         int wmId = LOWORD(wParam);
         switch (wmId)
         {
+        case IDM_SHOW:
+            ShowWindow(hWnd, SW_SHOW);
+            SetForegroundWindow(hWnd);
+            break;
         case IDM_ABOUT:
             DialogBox(hInst, MAKEINTRESOURCE(IDD_ABOUTBOX), hWnd, About);
             break;
@@ -118,10 +122,44 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         }
     }
     break;
+
+    case WM_USER + 1:
+    {
+        switch (lParam)
+        {
+        case WM_LBUTTONDOWN:
+            if (IsWindowVisible(hWnd))
+                ShowWindow(hWnd, SW_HIDE);
+            else
+                ShowWindow(hWnd, SW_SHOW);
+            break;
+        
+        case WM_RBUTTONDOWN:
+        {
+            POINT pt;
+            GetCursorPos(&pt);
+            HMENU hMenu = CreatePopupMenu();
+            if (hMenu)
+            {
+                AppendMenu(hMenu, MF_STRING, IDM_SHOW, L"Control Panel");
+                AppendMenu(hMenu, MF_STRING, IDM_ABOUT, L"About");
+                AppendMenu(hMenu, MF_STRING, IDM_EXIT, L"Exit");
+
+                SetForegroundWindow(hWnd);
+                TrackPopupMenu(hMenu, TPM_RIGHTBUTTON, pt.x - 10, pt.y - 10, 0, hWnd, NULL);
+                DestroyMenu(hMenu);
+            }
+        }
+        break;
+        }
+    }
+    break;
+
     case WM_PAINT:
     {
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hWnd, &ps);
+        // Temp Info for debug
 
         WCHAR text[50];
         wsprintf(text, L"Your screen width seems to be: %d", screenWidth);
