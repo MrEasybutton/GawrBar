@@ -1,0 +1,8 @@
+﻿  GawrBar.cpp
+C:\Users\TYLERKIONGTAILE\OneDrive - NUS High School\Documents\GitHub\GawrBar\GawrBar\GawrBar.cpp(64,24): warning C4244: '=': conversion from 'double' to 'int', possible loss of data
+  Generating code
+  3 of 6 functions (50.0%) were compiled, the rest were copied from previous compilation.
+    0 functions were new in current compilation
+    0 functions had inline decision re-evaluated but remain unchanged
+  Finished generating code
+  GawrBar.vcxproj -> C:\Users\TYLERKIONGTAILE\OneDrive - NUS High School\Documents\GitHub\GawrBar\GawrBar\x64\Release\GawrBar.exe
