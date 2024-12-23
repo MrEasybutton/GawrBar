@@ -16,7 +16,7 @@ BOOL InitInstance(HINSTANCE, int);
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 INT_PTR CALLBACK About(HWND, UINT, WPARAM, LPARAM);
 
-int screenWidth; // Screen Width (currently has issues so a fix is issued below)
+int screenWidth; // Screen Width (this currently has issues so a fix is issued below)
 int screenHeight;
 
 NOTIFYICONDATA nid;
