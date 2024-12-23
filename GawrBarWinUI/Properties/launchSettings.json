@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "GawrBarWinUI (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "GawrBarWinUI (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}
