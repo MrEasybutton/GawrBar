@@ -94,7 +94,6 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 
     Shell_NotifyIcon(NIM_ADD, &nid);
 
-
     return TRUE;
 }
 
@@ -159,8 +158,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     {
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hWnd, &ps);
-        // Temp Info for debug
 
+        // Temp Info for debug
         WCHAR text[50];
         wsprintf(text, L"Your screen width seems to be: %d", screenWidth);
         TextOut(hdc, 10, 10, text, lstrlen(text));
