@@ -24,8 +24,8 @@ int screenWidth; // Screen Width (this currently has issues so a fix is issued b
 int screenHeight;
 
 
-enum TaskbarMode { MODE_DOCK, MODE_SPLIT, MODE_CENTER };
-TaskbarMode currentMode = MODE_DOCK;
+enum TaskbarMode { MODE_DOCKLEFT, MODE_DOCKCENTER, MODE_SPLIT, MODE_CENTER };
+TaskbarMode currentMode = MODE_DOCKLEFT;
 
 
 NOTIFYICONDATA nid;
@@ -61,6 +61,7 @@ ATOM MyRegisterClass(HINSTANCE hInstance)
 
 }
 
+
 void SetTaskbarAlignment(bool center) {
     HKEY hKey;
     if (RegOpenKeyEx(HKEY_CURRENT_USER,
@@ -83,9 +84,18 @@ void ApplyTaskbarMode()
         return;
     }
 
-    if (currentMode == MODE_DOCK) {
+    if (currentMode == MODE_DOCKLEFT) {
         // Dock Mode is simple, just applies a region with adjustable margins
         int leftMargin = 4, rightMargin = 4, upperMargin = 4, lowerMargin = 4;
+        SetTaskbarAlignment(false);
+        HRGN hRgn = CreateRoundRectRgn(leftMargin, upperMargin, screenWidth - rightMargin, 86 - lowerMargin - 1, 20, 20);
+        SetWindowRgn(hTaskbar, hRgn, TRUE);
+        DeleteObject(hRgn);
+    }
+    else if (currentMode == MODE_DOCKCENTER) {
+        // Dock Mode is simple, just applies a region with adjustable margins
+        int leftMargin = 4, rightMargin = 4, upperMargin = 4, lowerMargin = 4;
+        SetTaskbarAlignment(true);
         HRGN hRgn = CreateRoundRectRgn(leftMargin, upperMargin, screenWidth - rightMargin, 86 - lowerMargin - 1, 20, 20);
         SetWindowRgn(hTaskbar, hRgn, TRUE);
         DeleteObject(hRgn);
@@ -186,8 +196,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         case IDM_EXIT:
             DestroyWindow(hWnd);
             break;
-        case IDM_MODE_DOCK:
-            currentMode = MODE_DOCK;
+
+        case IDM_MODE_DOCKLEFT:
+            currentMode = MODE_DOCKLEFT;
+            ApplyTaskbarMode();
+            break;
+        case IDM_MODE_DOCKCENTER:
+            currentMode = MODE_DOCKCENTER;
             ApplyTaskbarMode();
             break;
         case IDM_MODE_CENTER:
@@ -224,10 +239,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             {
                 AppendMenu(hMenu, MF_STRING, IDM_SHOW, L"Control Panel");
                 HMENU hSubMenu = CreatePopupMenu();
-                AppendMenu(hSubMenu, MF_STRING | (currentMode == MODE_DOCK ? MF_CHECKED : 0), IDM_MODE_DOCK, L"Dock");
-                AppendMenu(hSubMenu, MF_STRING | (currentMode == MODE_CENTER ? MF_CHECKED : 0), IDM_MODE_CENTER, L"Center");
-                AppendMenu(hSubMenu, MF_STRING | (currentMode == MODE_SPLIT ? MF_CHECKED : 0), IDM_MODE_SPLIT, L"Split");
-                AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hSubMenu, L"Mode");
+                HMENU hAlignMenu = CreatePopupMenu();
+                AppendMenu(hAlignMenu, MF_STRING | (currentMode == MODE_DOCKLEFT ? MF_CHECKED : 0), IDM_MODE_DOCKLEFT, L"Left");
+                AppendMenu(hAlignMenu, MF_STRING | (currentMode == MODE_DOCKCENTER ? MF_CHECKED : 0), IDM_MODE_DOCKCENTER, L"Center");
+                AppendMenu(hSubMenu, MF_POPUP, (UINT_PTR)hAlignMenu, L"Shoreline");
+                AppendMenu(hSubMenu, MF_STRING | (currentMode == MODE_CENTER ? MF_CHECKED : 0), IDM_MODE_CENTER, L"Core");
+                AppendMenu(hSubMenu, MF_STRING | (currentMode == MODE_SPLIT ? MF_CHECKED : 0), IDM_MODE_SPLIT, L"Tide");
+                AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hSubMenu, L"Configure Beach");
                 AppendMenu(hMenu, MF_STRING, IDM_ABOUT, L"About");
                 AppendMenu(hMenu, MF_STRING, IDM_EXIT, L"Exit");
 
