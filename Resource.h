@@ -16,6 +16,10 @@
 #define IDC_MYICON				2
 #ifndef IDC_STATIC
 #define IDC_STATIC				-1
+#define IDM_MODE_DOCK 2000
+#define IDM_MODE_SPLIT 2001
+#define IDM_MODE_CENTER 2002
+
 #endif
 // Next default values for new objects
 //

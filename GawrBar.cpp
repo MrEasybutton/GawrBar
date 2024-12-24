@@ -2,8 +2,12 @@
 #include "GawrBar.h"
 #include <dwmapi.h>                 // Window Framing API
 #include <cmath>                    // Math stuff 
-#include <windows.h>                
+#include <windows.h>   
+#include <string>
+#include <iostream>
 #include <shellapi.h>               // System Tray Icons
+#include <shlwapi.h>                // For registry hacks
+#pragma comment(lib, "shlwapi.lib")
 #pragma comment(lib, "dwmapi.lib")
 
 #define MAX_LOADSTRING 100
@@ -19,8 +23,12 @@ INT_PTR CALLBACK About(HWND, UINT, WPARAM, LPARAM);
 int screenWidth; // Screen Width (this currently has issues so a fix is issued below)
 int screenHeight;
 
-NOTIFYICONDATA nid;
 
+enum TaskbarMode { MODE_DOCK, MODE_SPLIT, MODE_CENTER };
+TaskbarMode currentMode = MODE_DOCK;
+
+
+NOTIFYICONDATA nid;
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPWSTR lpCmdLine, _In_ int nCmdShow)
 {
@@ -50,6 +58,80 @@ ATOM MyRegisterClass(HINSTANCE hInstance)
                          (HBRUSH)(COLOR_WINDOW + 1), MAKEINTRESOURCEW(IDC_GAWRBAR), szWindowClass,
                          LoadIcon(hInstance, MAKEINTRESOURCE(IDI_SMALL)) };
     return RegisterClassExW(&wcex);
+
+}
+
+void SetTaskbarAlignment(bool center) {
+    HKEY hKey;
+    if (RegOpenKeyEx(HKEY_CURRENT_USER,
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+        0, KEY_SET_VALUE, &hKey) == ERROR_SUCCESS) {
+        DWORD value = center ? 1 : 0;
+        RegSetValueEx(hKey, L"TaskbarAl", 0, REG_DWORD, (BYTE*)&value, sizeof(value));
+        RegCloseKey(hKey);
+
+        HWND hTaskbar = FindWindow(L"Shell_TrayWnd", NULL);
+        PostMessage(hTaskbar, WM_SETTINGCHANGE, 0, (LPARAM)L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced");
+    }
+}
+
+void ApplyTaskbarMode()
+{
+    HWND hTaskbar = FindWindow(L"Shell_TrayWnd", NULL);
+    if (!hTaskbar) {
+        MessageBox(NULL, L"Taskbar not found!", L"Error", MB_ICONERROR);
+        return;
+    }
+
+    if (currentMode == MODE_DOCK) {
+        // Dock Mode is simple, just applies a region with adjustable margins
+        int leftMargin = 4, rightMargin = 4, upperMargin = 4, lowerMargin = 4;
+        HRGN hRgn = CreateRoundRectRgn(leftMargin, upperMargin, screenWidth - rightMargin, 86 - lowerMargin - 1, 20, 20);
+        SetWindowRgn(hTaskbar, hRgn, TRUE);
+        DeleteObject(hRgn);
+    }
+    else if (currentMode == MODE_SPLIT) {
+        // Split Mode separates the taskbar into two regions.
+
+        SetTaskbarAlignment(false);
+        int totalSections = 3;
+        int margin = 4;
+        int sectionWidth = (screenWidth - (margin * (totalSections + 1))) / totalSections;
+        int sectionHeight = 86;
+
+        HRGN hRgn1 = CreateRoundRectRgn(margin, margin, margin + sectionWidth, sectionHeight - margin - 1, 20, 20);
+        HRGN hRgn2 = CreateRoundRectRgn(screenWidth - sectionWidth + sectionHeight * 2, margin, screenWidth - margin, sectionHeight - margin - 1, 20, 20);
+
+        HRGN hCombinedRgn = CreateRectRgn(0, 0, 0, 0);
+        CombineRgn(hCombinedRgn, hRgn1, hRgn2, RGN_OR);
+
+        SetWindowRgn(hTaskbar, hCombinedRgn, TRUE);
+
+        DeleteObject(hRgn1);
+        DeleteObject(hRgn2);
+    }
+    else if (currentMode == MODE_CENTER) {
+        // Center Mode realigns the taskabr
+        SetTaskbarAlignment(true);
+
+        int sectionWidth = screenWidth / 3;
+        int sectionHeight = 86;
+        int startX = (screenWidth - sectionWidth) / 2;
+        int margin = 4;
+
+        HRGN hRgn1 = CreateRoundRectRgn(startX, margin, startX + sectionWidth, sectionHeight - margin - 1, 20, 20);
+        HRGN hRgn2 = CreateRoundRectRgn(screenWidth - sectionWidth + sectionHeight * 2, margin, screenWidth - margin, sectionHeight - margin - 1, 20, 20);
+
+        HRGN hCombinedRgn = CreateRectRgn(0, 0, 0, 0);
+        CombineRgn(hCombinedRgn, hRgn1, hRgn2, RGN_OR);
+        SetWindowRgn(hTaskbar, hCombinedRgn, TRUE);
+        DeleteObject(hRgn1);
+        DeleteObject(hRgn2);
+    }
+
+
+    MARGINS margins = { -1 };
+    DwmExtendFrameIntoClientArea(hTaskbar, &margins);
 }
 
 BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
@@ -60,25 +142,11 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
     if (!hWnd)
         return FALSE;
 
-    int sysWidthRead = GetSystemMetrics(SM_CXSCREEN); // This is inaccurate apparently
+    int sysWidthRead = GetSystemMetrics(SM_CXSCREEN);
     screenWidth = round(sysWidthRead + round((sysWidthRead - 4) * 0.754));
     screenHeight = GetSystemMetrics(SM_CYSCREEN);
-    int leftMargin = 4, rightMargin = 4, upperMargin = 4, lowerMargin = 4;
-    int windowWidth = screenWidth - leftMargin - rightMargin, windowHeight = 200;
 
-    SetWindowPos(hWnd, HWND_TOP, 0, 20, 500, 560, SWP_NOZORDER);
-
-    HWND hTaskbar = FindWindow(L"Shell_TrayWnd", NULL);
-    if (hTaskbar) {
-        HRGN hRgn = CreateRoundRectRgn(leftMargin, upperMargin, screenWidth - rightMargin, 86 - lowerMargin, 20, 20);
-        SetWindowRgn(hTaskbar, hRgn, TRUE);
-        MARGINS margins = { -1 };
-        DwmExtendFrameIntoClientArea(hTaskbar, &margins);
-    }
-    else {
-        MessageBox(NULL, L"Taskbar not found!", L"Error", MB_ICONERROR);
-        return FALSE;
-    }
+    ApplyTaskbarMode();
 
     ShowWindow(hWnd, SW_HIDE);
     UpdateWindow(hWnd);
@@ -90,12 +158,14 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
     nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
     nid.uCallbackMessage = WM_USER + 1;
     nid.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_GAWRBAR));
-    wcscpy_s(nid.szTip, L"GawrBar"); // System Tray Icon
+    wcscpy_s(nid.szTip, L"GawrBar");
 
     Shell_NotifyIcon(NIM_ADD, &nid);
 
     return TRUE;
 }
+
+
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
@@ -115,6 +185,18 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             break;
         case IDM_EXIT:
             DestroyWindow(hWnd);
+            break;
+        case IDM_MODE_DOCK:
+            currentMode = MODE_DOCK;
+            ApplyTaskbarMode();
+            break;
+        case IDM_MODE_CENTER:
+            currentMode = MODE_CENTER;
+            ApplyTaskbarMode();
+            break;
+        case IDM_MODE_SPLIT:
+            currentMode = MODE_SPLIT;
+            ApplyTaskbarMode();
             break;
         default:
             return DefWindowProc(hWnd, message, wParam, lParam);
@@ -141,6 +223,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             if (hMenu)
             {
                 AppendMenu(hMenu, MF_STRING, IDM_SHOW, L"Control Panel");
+                HMENU hSubMenu = CreatePopupMenu();
+                AppendMenu(hSubMenu, MF_STRING | (currentMode == MODE_DOCK ? MF_CHECKED : 0), IDM_MODE_DOCK, L"Dock");
+                AppendMenu(hSubMenu, MF_STRING | (currentMode == MODE_CENTER ? MF_CHECKED : 0), IDM_MODE_CENTER, L"Center");
+                AppendMenu(hSubMenu, MF_STRING | (currentMode == MODE_SPLIT ? MF_CHECKED : 0), IDM_MODE_SPLIT, L"Split");
+                AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hSubMenu, L"Mode");
                 AppendMenu(hMenu, MF_STRING, IDM_ABOUT, L"About");
                 AppendMenu(hMenu, MF_STRING, IDM_EXIT, L"Exit");
 
@@ -153,6 +240,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         }
     }
     break;
+    
 
     case WM_PAINT:
     {
