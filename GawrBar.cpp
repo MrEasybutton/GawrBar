@@ -22,11 +22,12 @@ INT_PTR CALLBACK About(HWND, UINT, WPARAM, LPARAM);
 
 int screenWidth; // Screen Width (this currently has issues so a fix is issued below)
 int screenHeight;
-
+int secWidth;
 
 enum TaskbarMode { MODE_DOCKLEFT, MODE_DOCKCENTER, MODE_SPLIT, MODE_CENTER };
 TaskbarMode currentMode = MODE_DOCKLEFT;
 
+int appCount = 0;
 
 NOTIFYICONDATA nid;
 
@@ -61,6 +62,48 @@ ATOM MyRegisterClass(HINSTANCE hInstance)
 
 }
 
+bool IsTaskbarWindow(HWND hwnd) {
+    if (!IsWindowVisible(hwnd)) {
+        return false;
+    }
+
+    LONG exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+
+    if (exStyle & WS_EX_TOOLWINDOW) {
+        return false;
+    }
+
+    if (exStyle & WS_EX_APPWINDOW) {
+        return true;
+    }
+
+    HWND owner = GetWindow(hwnd, GW_OWNER);
+    if (owner != nullptr) {
+        return false;
+    }
+
+    return true;
+}
+
+BOOL CALLBACK EnumerateWindowsProc(HWND hwnd, LPARAM lParam) {
+    wchar_t windowTitle[1024];
+    GetWindowText(hwnd, windowTitle, sizeof(windowTitle) / sizeof(wchar_t));
+
+    if (wcslen(windowTitle) > 0 && wcscmp(windowTitle, L"Program Manager") != 0) {
+        if (IsTaskbarWindow(hwnd)) {
+            appCount++;
+        }
+    }
+    return TRUE;
+}
+
+int GetAppCount() {
+    appCount = 0;
+    EnumWindows(EnumerateWindowsProc, 0);
+    appCount++;
+    return appCount;
+}
+
 
 void SetTaskbarAlignment(bool center) {
     HKEY hKey;
@@ -84,6 +127,8 @@ void ApplyTaskbarMode()
         return;
     }
 
+    secWidth = GetAppCount() * 80;
+
     if (currentMode == MODE_DOCKLEFT) {
         // Dock Mode is simple, just applies a region with adjustable margins
         int leftMargin = 4, rightMargin = 4, upperMargin = 4, lowerMargin = 4;
@@ -102,14 +147,14 @@ void ApplyTaskbarMode()
     }
     else if (currentMode == MODE_SPLIT) {
         // Split Mode separates the taskbar into two regions.
-
         SetTaskbarAlignment(false);
+
         int totalSections = 3;
         int margin = 4;
         int sectionWidth = (screenWidth - (margin * (totalSections + 1))) / totalSections;
         int sectionHeight = 86;
 
-        HRGN hRgn1 = CreateRoundRectRgn(margin, margin, margin + sectionWidth, sectionHeight - margin - 1, 20, 20);
+        HRGN hRgn1 = CreateRoundRectRgn(margin, margin, secWidth, sectionHeight - margin - 1, 20, 20);
         HRGN hRgn2 = CreateRoundRectRgn(screenWidth - sectionWidth + sectionHeight * 2, margin, screenWidth - margin, sectionHeight - margin - 1, 20, 20);
 
         HRGN hCombinedRgn = CreateRectRgn(0, 0, 0, 0);
@@ -229,7 +274,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             else
                 ShowWindow(hWnd, SW_SHOW);
             break;
-        
+
         case WM_RBUTTONDOWN:
         {
             POINT pt;
@@ -258,7 +303,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         }
     }
     break;
-    
+
 
     case WM_PAINT:
     {
@@ -269,6 +314,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         WCHAR text[50];
         wsprintf(text, L"Your screen width seems to be: %d", screenWidth);
         TextOut(hdc, 10, 10, text, lstrlen(text));
+        wsprintf(text, L"Your app count seems to be: %d", GetAppCount());
+        TextOut(hdc, 10, 40, text, lstrlen(text));
 
         EndPaint(hWnd, &ps);
     }

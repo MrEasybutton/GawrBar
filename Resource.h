@@ -22,6 +22,9 @@
 #define IDM_MODE_CENTER 2003
 #define IDM_PAL 2004
 
+
+
+
 #endif
 // Next default values for new objects
 //
