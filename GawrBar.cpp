@@ -1,16 +1,22 @@
 #include "framework.h"
 #include "GawrBar.h"
-#include <dwmapi.h>                 // Window Framing API
-#include <cmath>                    // Math stuff 
-#include <windows.h>   
+#include <dwmapi.h>                 
+#include <cmath>                    
+#include <windows.h>
 #include <string>
+#include <set>
+#include <tchar.h>
 #include <iostream>
-#include <shellapi.h>               // System Tray Icons
-#include <shlwapi.h>                // For registry hacks
+#include <shellapi.h>               
+#include <shlwapi.h>                
 #pragma comment(lib, "shlwapi.lib")
 #pragma comment(lib, "dwmapi.lib")
 
 #define MAX_LOADSTRING 100
+#define TIMER_ID 1
+#define TIMER_INTERVAL 500 
+
+#define IDR_YURUKA 101
 
 HINSTANCE hInst;
 WCHAR szTitle[MAX_LOADSTRING], szWindowClass[MAX_LOADSTRING];
@@ -20,16 +26,54 @@ BOOL InitInstance(HINSTANCE, int);
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 INT_PTR CALLBACK About(HWND, UINT, WPARAM, LPARAM);
 
-int screenWidth; // Screen Width (this currently has issues so a fix is issued below)
+int screenWidth;
 int screenHeight;
 int secWidth;
 
 enum TaskbarMode { MODE_DOCKLEFT, MODE_DOCKCENTER, MODE_SPLIT, MODE_CENTER };
-TaskbarMode currentMode = MODE_DOCKLEFT;
+TaskbarMode currentMode = MODE_SPLIT;
 
 int appCount = 0;
-
 NOTIFYICONDATA nid;
+
+ATOM MyRegisterClass(HINSTANCE hInstance) {
+    WNDCLASSEXW wcex;
+    wcex.cbSize = sizeof(WNDCLASSEX);
+    wcex.style = CS_HREDRAW | CS_VREDRAW;
+    wcex.lpfnWndProc = WndProc;
+    wcex.cbClsExtra = 0;
+    wcex.cbWndExtra = 0;
+    wcex.hInstance = hInstance;
+    wcex.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_APPLICATION));
+    wcex.hCursor = LoadCursor(nullptr, IDC_ARROW);
+    wcex.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
+    wcex.lpszMenuName = MAKEINTRESOURCE(IDC_GAWRBAR);
+    wcex.lpszClassName = szWindowClass;
+    wcex.hIconSm = LoadIcon(wcex.hInstance, MAKEINTRESOURCE(IDI_APPLICATION));
+
+    return RegisterClassExW(&wcex);
+}
+
+BOOL AddCustomFont() {
+
+    HRSRC hRes = FindResource(hInst, MAKEINTRESOURCE(IDR_YURUKA), RT_FONT);
+    if (hRes == NULL) {
+        return FALSE;
+    }
+
+    HGLOBAL hData = LoadResource(hInst, hRes);
+    if (hData == NULL) {
+        return FALSE;
+    }
+
+    void* pData = LockResource(hData);
+    if (pData == NULL) {
+        return FALSE;
+    }
+
+    HANDLE hFont = AddFontMemResourceEx(pData, SizeofResource(hInst, hRes), NULL, NULL);
+    return hFont != NULL;
+}
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPWSTR lpCmdLine, _In_ int nCmdShow)
 {
@@ -52,14 +96,44 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
     return (int)msg.wParam;
 }
 
-ATOM MyRegisterClass(HINSTANCE hInstance)
-{
-    WNDCLASSEXW wcex = { sizeof(WNDCLASSEX), CS_HREDRAW | CS_VREDRAW, WndProc, 0, 0, hInstance,
-                         LoadIcon(hInstance, MAKEINTRESOURCE(IDI_GAWRBAR)), LoadCursor(nullptr, IDC_ARROW),
-                         (HBRUSH)(COLOR_WINDOW + 1), MAKEINTRESOURCEW(IDC_GAWRBAR), szWindowClass,
-                         LoadIcon(hInstance, MAKEINTRESOURCE(IDI_SMALL)) };
-    return RegisterClassExW(&wcex);
+int GetAppCount() {
+    appCount = 0;
+    EnumWindows([](HWND hwnd, LPARAM lParam) -> BOOL {
 
+        if (IsWindowVisible(hwnd) && !GetWindow(hwnd, GW_OWNER)) {
+            wchar_t windowTitle[1024];
+            GetWindowText(hwnd, windowTitle, sizeof(windowTitle) / sizeof(wchar_t));
+
+            if (wcslen(windowTitle) > 0) {
+
+                if (wcscmp(windowTitle, L"Program Manager") == 0) {
+                    return TRUE;
+                }
+                if (wcscmp(windowTitle, L"Explorer") == 0) {
+                    return FALSE;
+                }
+
+                wchar_t className[256];
+                GetClassName(hwnd, className, sizeof(className) / sizeof(wchar_t));
+
+                if (wcscmp(className, L"Shell_TrayWnd") == 0) {
+
+                    return FALSE;
+                }
+
+                if (wcscmp(className, L"Button") == 0 || wcscmp(className, L"SysListView32") == 0) {
+
+                    return TRUE;
+                }
+
+                appCount++;
+            }
+        }
+
+        return TRUE;
+        }, 0);
+
+    return appCount;
 }
 
 bool IsTaskbarWindow(HWND hwnd) {
@@ -85,26 +159,6 @@ bool IsTaskbarWindow(HWND hwnd) {
     return true;
 }
 
-BOOL CALLBACK EnumerateWindowsProc(HWND hwnd, LPARAM lParam) {
-    wchar_t windowTitle[1024];
-    GetWindowText(hwnd, windowTitle, sizeof(windowTitle) / sizeof(wchar_t));
-
-    if (wcslen(windowTitle) > 0 && wcscmp(windowTitle, L"Program Manager") != 0) {
-        if (IsTaskbarWindow(hwnd)) {
-            appCount++;
-        }
-    }
-    return TRUE;
-}
-
-int GetAppCount() {
-    appCount = 0;
-    EnumWindows(EnumerateWindowsProc, 0);
-    appCount++;
-    return appCount;
-}
-
-
 void SetTaskbarAlignment(bool center) {
     HKEY hKey;
     if (RegOpenKeyEx(HKEY_CURRENT_USER,
@@ -119,18 +173,32 @@ void SetTaskbarAlignment(bool center) {
     }
 }
 
-void ApplyTaskbarMode()
-{
+void ApplyTaskbarMode() {
     HWND hTaskbar = FindWindow(L"Shell_TrayWnd", NULL);
     if (!hTaskbar) {
-        MessageBox(NULL, L"Taskbar not found!", L"Error", MB_ICONERROR);
+        OutputDebugString(L"[Error] Taskbar not found.\n");
         return;
     }
 
     secWidth = GetAppCount() * 80;
 
-    if (currentMode == MODE_DOCKLEFT) {
-        // Dock Mode is simple, just applies a region with adjustable margins
+    if (currentMode == MODE_SPLIT) {
+        int margin = 4;
+        int sectionHeight = 86;
+        SetTaskbarAlignment(false);
+        HRGN hRgn1 = CreateRoundRectRgn(margin, margin, secWidth + 180, sectionHeight - margin - 1, 20, 20);
+        HRGN hRgn2 = CreateRoundRectRgn(screenWidth * 0.75, margin, screenWidth - margin, sectionHeight - margin - 1, 20, 20);
+
+        HRGN hCombinedRgn = CreateRectRgn(0, 0, 0, 0);
+        CombineRgn(hCombinedRgn, hRgn1, hRgn2, RGN_OR);
+
+        SetWindowRgn(hTaskbar, hCombinedRgn, TRUE);
+
+        DeleteObject(hRgn1);
+        DeleteObject(hRgn2);
+    }
+    else if (currentMode == MODE_DOCKLEFT) {
+
         int leftMargin = 4, rightMargin = 4, upperMargin = 4, lowerMargin = 4;
         SetTaskbarAlignment(false);
         HRGN hRgn = CreateRoundRectRgn(leftMargin, upperMargin, screenWidth - rightMargin, 86 - lowerMargin - 1, 20, 20);
@@ -138,44 +206,22 @@ void ApplyTaskbarMode()
         DeleteObject(hRgn);
     }
     else if (currentMode == MODE_DOCKCENTER) {
-        // Dock Mode is simple, just applies a region with adjustable margins
+
         int leftMargin = 4, rightMargin = 4, upperMargin = 4, lowerMargin = 4;
         SetTaskbarAlignment(true);
         HRGN hRgn = CreateRoundRectRgn(leftMargin, upperMargin, screenWidth - rightMargin, 86 - lowerMargin - 1, 20, 20);
         SetWindowRgn(hTaskbar, hRgn, TRUE);
         DeleteObject(hRgn);
     }
-    else if (currentMode == MODE_SPLIT) {
-        // Split Mode separates the taskbar into two regions.
-        SetTaskbarAlignment(false);
-
-        int totalSections = 3;
-        int margin = 4;
-        int sectionWidth = (screenWidth - (margin * (totalSections + 1))) / totalSections;
-        int sectionHeight = 86;
-
-        HRGN hRgn1 = CreateRoundRectRgn(margin, margin, secWidth, sectionHeight - margin - 1, 20, 20);
-        HRGN hRgn2 = CreateRoundRectRgn(screenWidth - sectionWidth + sectionHeight * 2, margin, screenWidth - margin, sectionHeight - margin - 1, 20, 20);
-
-        HRGN hCombinedRgn = CreateRectRgn(0, 0, 0, 0);
-        CombineRgn(hCombinedRgn, hRgn1, hRgn2, RGN_OR);
-
-        SetWindowRgn(hTaskbar, hCombinedRgn, TRUE);
-
-        DeleteObject(hRgn1);
-        DeleteObject(hRgn2);
-    }
     else if (currentMode == MODE_CENTER) {
-        // Center Mode realigns the taskabr
-        SetTaskbarAlignment(true);
 
-        int sectionWidth = screenWidth / 3;
+        SetTaskbarAlignment(true);
         int sectionHeight = 86;
-        int startX = (screenWidth - sectionWidth) / 2;
+        int startX = (screenWidth - secWidth) / 2;
         int margin = 4;
 
-        HRGN hRgn1 = CreateRoundRectRgn(startX, margin, startX + sectionWidth, sectionHeight - margin - 1, 20, 20);
-        HRGN hRgn2 = CreateRoundRectRgn(screenWidth - sectionWidth + sectionHeight * 2, margin, screenWidth - margin, sectionHeight - margin - 1, 20, 20);
+        HRGN hRgn1 = CreateRoundRectRgn(startX - 80, margin, startX + secWidth + 80, sectionHeight - margin - 1, 20, 20);
+        HRGN hRgn2 = CreateRoundRectRgn(screenWidth * 0.75, margin, screenWidth - margin, sectionHeight - margin - 1, 20, 20);
 
         HRGN hCombinedRgn = CreateRectRgn(0, 0, 0, 0);
         CombineRgn(hCombinedRgn, hRgn1, hRgn2, RGN_OR);
@@ -183,19 +229,16 @@ void ApplyTaskbarMode()
         DeleteObject(hRgn1);
         DeleteObject(hRgn2);
     }
-
 
     MARGINS margins = { -1 };
     DwmExtendFrameIntoClientArea(hTaskbar, &margins);
 }
 
-BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
-{
+BOOL InitInstance(HINSTANCE hInstance, int nCmdShow) {
     hInst = hInstance;
     HWND hWnd = CreateWindowExW(WS_EX_TOOLWINDOW, szWindowClass, szTitle, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, 100, CW_USEDEFAULT, 0, nullptr, nullptr, hInstance, nullptr);
 
-    if (!hWnd)
-        return FALSE;
+    if (!hWnd) return FALSE;
 
     int sysWidthRead = GetSystemMetrics(SM_CXSCREEN);
     screenWidth = round(sysWidthRead + round((sysWidthRead - 4) * 0.754));
@@ -215,73 +258,44 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
     nid.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_GAWRBAR));
     wcscpy_s(nid.szTip, L"GawrBar");
 
-    Shell_NotifyIcon(NIM_ADD, &nid);
+    if (!Shell_NotifyIcon(NIM_ADD, &nid)) {
+        OutputDebugString(L"[Error] Failed to add system tray icon.\n");
+    }
 
     return TRUE;
 }
 
+LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
+    static int lastAppCount = 0;
 
+    switch (message) {
+    case WM_CREATE:
+        SetTimer(hWnd, TIMER_ID, TIMER_INTERVAL, NULL);
+        break;
 
-LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
-{
-    switch (message)
-    {
-    case WM_COMMAND:
-    {
-        int wmId = LOWORD(wParam);
-        switch (wmId)
-        {
-        case IDM_SHOW:
-            ShowWindow(hWnd, SW_SHOW);
-            SetForegroundWindow(hWnd);
-            break;
-        case IDM_ABOUT:
-            DialogBox(hInst, MAKEINTRESOURCE(IDD_ABOUTBOX), hWnd, About);
-            break;
-        case IDM_EXIT:
-            DestroyWindow(hWnd);
-            break;
-
-        case IDM_MODE_DOCKLEFT:
-            currentMode = MODE_DOCKLEFT;
-            ApplyTaskbarMode();
-            break;
-        case IDM_MODE_DOCKCENTER:
-            currentMode = MODE_DOCKCENTER;
-            ApplyTaskbarMode();
-            break;
-        case IDM_MODE_CENTER:
-            currentMode = MODE_CENTER;
-            ApplyTaskbarMode();
-            break;
-        case IDM_MODE_SPLIT:
-            currentMode = MODE_SPLIT;
-            ApplyTaskbarMode();
-            break;
-        default:
-            return DefWindowProc(hWnd, message, wParam, lParam);
+    case WM_TIMER:
+        if (wParam == TIMER_ID) {
+            int currentAppCount = GetAppCount();
+            if (currentAppCount != lastAppCount) {
+                lastAppCount = currentAppCount;
+                ApplyTaskbarMode();
+                OutputDebugString(L"[Debug] Updated.\n");
+            }
         }
-    }
-    break;
+        break;
 
     case WM_USER + 1:
-    {
-        switch (lParam)
-        {
-        case WM_LBUTTONDOWN:
+        if (lParam == WM_LBUTTONDOWN) {
             if (IsWindowVisible(hWnd))
                 ShowWindow(hWnd, SW_HIDE);
             else
                 ShowWindow(hWnd, SW_SHOW);
-            break;
-
-        case WM_RBUTTONDOWN:
-        {
+        }
+        if (lParam == WM_RBUTTONDOWN) {
             POINT pt;
             GetCursorPos(&pt);
             HMENU hMenu = CreatePopupMenu();
-            if (hMenu)
-            {
+            if (hMenu) {
                 AppendMenu(hMenu, MF_STRING, IDM_SHOW, L"Control Panel");
                 HMENU hSubMenu = CreatePopupMenu();
                 HMENU hAlignMenu = CreatePopupMenu();
@@ -290,7 +304,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                 AppendMenu(hSubMenu, MF_POPUP, (UINT_PTR)hAlignMenu, L"Shoreline");
                 AppendMenu(hSubMenu, MF_STRING | (currentMode == MODE_CENTER ? MF_CHECKED : 0), IDM_MODE_CENTER, L"Core");
                 AppendMenu(hSubMenu, MF_STRING | (currentMode == MODE_SPLIT ? MF_CHECKED : 0), IDM_MODE_SPLIT, L"Tide");
-                AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hSubMenu, L"Configure Beach");
+                AppendMenu(hMenu, MF_POPUP, (UINT_PTR)hSubMenu, L"Configure Layout");
                 AppendMenu(hMenu, MF_STRING, IDM_ABOUT, L"About");
                 AppendMenu(hMenu, MF_STRING, IDM_EXIT, L"Exit");
 
@@ -300,29 +314,102 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             }
         }
         break;
-        }
-    }
-    break;
 
+    case WM_COMMAND:
+        switch (LOWORD(wParam)) {
+
+        case IDM_SHOW:
+            ShowWindow(hWnd, SW_SHOW);
+            SetForegroundWindow(hWnd);
+            break;
+
+        case IDM_MODE_DOCKLEFT:
+            currentMode = MODE_DOCKLEFT;
+            ApplyTaskbarMode();
+            break;
+
+        case IDM_MODE_DOCKCENTER:
+            currentMode = MODE_DOCKCENTER;
+            ApplyTaskbarMode();
+            break;
+
+        case IDM_MODE_CENTER:
+            currentMode = MODE_CENTER;
+            ApplyTaskbarMode();
+            break;
+
+        case IDM_MODE_SPLIT:
+            currentMode = MODE_SPLIT;
+            ApplyTaskbarMode();
+            break;
+
+        case IDM_ABOUT:
+            DialogBox(hInst, MAKEINTRESOURCE(IDD_ABOUTBOX), hWnd, About);
+            break;
+
+        case IDM_EXIT:
+
+            Shell_NotifyIcon(NIM_DELETE, &nid);
+
+            DestroyWindow(hWnd);
+            PostQuitMessage(0);
+            break;
+
+            break;
+        default:
+            return DefWindowProc(hWnd, message, wParam, lParam);
+        }
+        return 0;
 
     case WM_PAINT:
     {
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hWnd, &ps);
 
-        // Temp Info for debug
-        WCHAR text[50];
-        wsprintf(text, L"Your screen width seems to be: %d", screenWidth);
-        TextOut(hdc, 10, 10, text, lstrlen(text));
-        wsprintf(text, L"Your app count seems to be: %d", GetAppCount());
-        TextOut(hdc, 10, 40, text, lstrlen(text));
+        RECT rect;
+        GetClientRect(hWnd, &rect);
+        int padding = 8;
+
+        HBRUSH hBrush = CreateSolidBrush(RGB(51, 115, 157));
+        FillRect(hdc, &rect, hBrush);
+        DeleteObject(hBrush);
+
+        HFONT hFont = CreateFont(
+            24, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+            OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH, L"Yuruka.otf");
+        SelectObject(hdc, hFont);
+
+        WCHAR text[100];
+
+        SetTextColor(hdc, RGB(190, 68, 73));
+        wsprintf(text, L"GawrBar Taskbar Customisation Utility");
+        TextOut(hdc, padding, padding, text, lstrlen(text));
+
+        SetTextColor(hdc, RGB(156, 201, 217));
+        wsprintf(text, L"Screen Width: %d px", screenWidth);
+        TextOut(hdc, padding, padding + 40, text, lstrlen(text));
+
+        wsprintf(text, L"You are running Version 1.0");
+        TextOut(hdc, padding, padding + 80, text, lstrlen(text));
+
+        HPEN hPen = CreatePen(PS_SOLID, 2, RGB(147, 169, 201));
+        SelectObject(hdc, hPen);
+        MoveToEx(hdc, padding, padding + 160, NULL);
+        LineTo(hdc, rect.right - padding, padding + 160);
+
+        DeleteObject(hPen);
+        DeleteObject(hFont);
 
         EndPaint(hWnd, &ps);
     }
     break;
+
     case WM_DESTROY:
     {
         HWND hTaskbar = FindWindow(L"Shell_TrayWnd", NULL);
+        KillTimer(hWnd, TIMER_ID);
+        Shell_NotifyIcon(NIM_DELETE, &nid);
+        PostQuitMessage(0);
         if (hTaskbar)
         {
             SetWindowRgn(hTaskbar, NULL, TRUE);
@@ -334,9 +421,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         PostQuitMessage(0);
     }
     break;
+
     default:
         return DefWindowProc(hWnd, message, wParam, lParam);
     }
+
     return 0;
 }
 

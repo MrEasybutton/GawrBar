@@ -145,7 +145,11 @@
   </ItemGroup>
   <ItemGroup>
     <Image Include="GawrBar.ico" />
+    <Image Include="gura.png" />
     <Image Include="small.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <Font Include="..\..\..\..\Downloads\Yuruka.otf" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

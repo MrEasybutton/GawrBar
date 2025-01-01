@@ -45,5 +45,13 @@
     <Image Include="GawrBar.ico">
       <Filter>Resource Files</Filter>
     </Image>
+    <Image Include="gura.png">
+      <Filter>Resource Files</Filter>
+    </Image>
+  </ItemGroup>
+  <ItemGroup>
+    <Font Include="..\..\..\..\Downloads\Yuruka.otf">
+      <Filter>Resource Files</Filter>
+    </Font>
   </ItemGroup>
 </Project>
