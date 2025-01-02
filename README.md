@@ -6,6 +6,8 @@
 GawrBar is a tool made to modify your taskbar alignment and appearance in a lightweight manner.
 It's very similar in function to RoundedTB but very experimental. If RoundedTB is Gawr Gura, this is Gabriella Giselle.
 
+NOTICE: oh nyo i forgot that the search icon exists ( i dont keep it on my taskbar) so if you do have the search icon then stick to the Shoreline Mode for now
+
 ## 💎 Features:
 
 ### Three modes: 
