@@ -42,8 +42,12 @@ In the case that you close GawrBar through a third-party app manager or the Task
 You can fix this by restarting Windows Explorer in your Task Manager.
 
 ## 📷 Gallery
+
+Shoreline Mode (Left-Aligned):
 ![Shoreline (Left-Align)](https://github.com/user-attachments/assets/c5888e39-ef12-43c2-8397-9182d172a4ba)
+Core Mode:
 ![Core](https://github.com/user-attachments/assets/4411db8a-4aac-4072-8e59-452fa01ce2c6)
+Tide Mode:
 ![Tide](https://github.com/user-attachments/assets/39f6d181-0ae5-4a1b-809c-af7bd55c7692)
 
 
